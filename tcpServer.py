@@ -34,7 +34,7 @@ def echo_client(s):
 
 def main():
 	host = "127.0.0.1"
-	port = 5001
+	port = 9999
 
 	s=socket.socket(AF_INET, SOCK_STREAM)				#specifying TCP and IPv4
 	s.bind((host,port))									#bind() takes only one argument

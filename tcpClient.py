@@ -13,10 +13,11 @@ obj_dec = AES.new(KEY, AES.MODE_CFB, IV)						#creating an object to encrypt our
 
 def main():
 	host = "127.0.0.1"
-	port = 5001
+	port = 9999
 
 	s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)		#specifying TCP and IPv4
 	ssl_sock = ssl.wrap_socket(s, cert_reqs=ssl.CERT_REQUIRED, ca_certs='cert.crt')	#provide full path to the certificate file location
+	print("h")
 	#the above function "wraps" the socket created with the security layer of signed certificate
 
 	ssl_sock.connect((host,port))
