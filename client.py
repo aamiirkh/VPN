@@ -19,7 +19,7 @@ def do_decrypt(ciphertext):
     return plaintext.decode('utf-8')
 
 
-def send_to_server(domain):
+def send_to_server(domain, conn):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # socket for sending domain to vpn server
     host = '127.0.0.1'
     port = 6666
@@ -30,24 +30,25 @@ def send_to_server(domain):
         print("[*] Connected to vpn server successfully.")
         sock.send(domain.encode())
 
-        output = sock.recv(4096)
+        output = sock.recv(99999)
         print(output)
+        conn.send(output)
     except Exception as e:
         print(e)
 
 
-def parse(conn):
+def parse(conn, request):
+    domain = ''
     try:
-        request = conn.recv(4098).decode()
-        domain = request.split('CONNECT')[1].split(':')[0].strip()
         port = request.split(':')[1].split('HTTP/1.1')[0].strip()
-
         if port == '443':
+            domain = request.split('CONNECT')[1].split(':')[0].strip()
             domain = "https://" + domain
         elif port == '80':
+            domain = request.split('GET')[1].split(':')[0].strip()
             domain = "http://" + domain
 
-        send_to_server(domain)
+        send_to_server(domain, conn)
     except Exception as e:
         print(e)
 
@@ -68,7 +69,8 @@ def connection_with_browser():
         while True:
             try:
                 conn, addr = sock.accept()
-                parse(conn)
+                request = conn.recv(4098).decode()
+                parse(conn, request)
             except Exception as e:
                 print(e)
                 sock.close()

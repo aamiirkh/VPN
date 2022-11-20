@@ -1,5 +1,6 @@
 import socket
 import os
+import requests
 from Crypto.Cipher import AES
 
 ThreadCount = 0
@@ -24,11 +25,12 @@ def do_decrypt(ciphertext):
 
 def get_html(data):
     try:
-        headers = os.system("curl https://www.google.com")
-        return bytes(headers)
+        headers = requests.get(data)
+        print(headers.content)
+        return headers.content
     except Exception as e:
         print(e)
-        
+
 
 def connect_to_client():
     global ThreadCount
