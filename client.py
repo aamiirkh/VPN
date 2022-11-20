@@ -33,7 +33,7 @@ def send_to_server(domain):
         output = sock.recv(4096)
         print(output)
     except Exception as e:
-        print(e
+        print(e)
 
 
 def parse(conn):
