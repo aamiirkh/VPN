@@ -1,10 +1,7 @@
 import socket
 import os
-from _thread import *
 from Crypto.Cipher import AES
 
-host = '127.0.0.1'
-port = 9999
 ThreadCount = 0
 
 BS = 16
@@ -25,38 +22,41 @@ def do_decrypt(ciphertext):
     return plaintext.decode('utf-8')
 
 
-def multi_threaded_client(connection):
-    while True:
-        data = connection.recv(2048)
-        if data != '':
-            response = 'Server message: ' + str(do_decrypt(data))
-            print("From client: " + str(do_decrypt(data)))
-            connection.sendall(do_encrypt(response))
+def get_html(data):
+    try:
+        headers = os.system("curl https://www.google.com")
+        return bytes(headers)
+    except Exception as e:
+        print(e)
+        
 
-
-def make_conn():
+def connect_to_client():
     global ThreadCount
-    ServerSideSocket = socket.socket()
+    host = '127.0.0.1'
+    port = 6666
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        ServerSideSocket.bind((host, port))
+        sock.bind((host, port))
     except socket.error as e:
-        print(str(e))
+        print(e)
 
-    print('[*] Socket is listening..')
-    ServerSideSocket.listen(5)
+    print('[*] Socket is Listening')
+    sock.listen(5)
 
     while True:
         try:
-            Client, address = ServerSideSocket.accept()
-            print('\n[*] Connected to: ' + address[0] + ':' + str(address[1]))
-            start_new_thread(multi_threaded_client, (Client,))
-            ThreadCount += 1
-            print('Thread Number: ' + str(ThreadCount))
+            Client, address = sock.accept()
+            print('[*] Connected To Client.')
+            while True:
+                data = Client.recv(2048).decode()
+                if data != '':
+                    output = get_html(data)
+                    Client.sendall(output)
         except socket.error as e:
-            print(str(e))
-            ServerSideSocket.close()
+            print(e)
+            sock.close()
 
 
 if __name__ == "__main__":
-    make_conn()
+    connect_to_client()
