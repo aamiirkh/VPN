@@ -30,16 +30,24 @@ def do_decrypt(ciphertext):
 def forward_data(server_sock, client_sock):
     try:
         while True:
+<<<<<<< HEAD
             data = client_sock.recv(999999)
             if data:
                 print(data)
                 server_sock.send(data)
+=======
+            data = client_sock.recv(4096)
+            if data:
+                print(data)
+                server_sock.send(data.encode())
+>>>>>>> ba346f63e04912b11f5fa68f55f7384d8818d217
             else:
                 break
     except:
         pass
 
 
+<<<<<<< HEAD
 def https(client_sock, domain, port):
     try:
         server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -47,6 +55,16 @@ def https(client_sock, domain, port):
         # Connect to the server
         server_sock.connect(("google.com", 443))
         #server_sock.do_handshake()
+=======
+def https(client_sock, domain, port, request):
+    try:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock = context.wrap_socket(server_sock, server_side=True, do_handshake_on_connect=False)
+        server_sock.do_handshake()
+
+        # Connect to the server
+        server_sock.connect((domain, int(port)))
+>>>>>>> ba346f63e04912b11f5fa68f55f7384d8818d217
         client_sock.send(b'HTTP/1.1 200 Connection Established\r\n\r\n')
 
         threading.Thread(target=forward_data, args=(server_sock, client_sock,)).start()
@@ -58,6 +76,7 @@ def https(client_sock, domain, port):
     return
 
 
+<<<<<<< HEAD
 def http(conn, domain, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((domain, 80))
@@ -69,11 +88,26 @@ def http(conn, domain, port):
                 break
             conn.send(data.encode())
             print(data)
+=======
+def http(conn, domain, port, request):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((request, port))
+    s.send(request)
+    try:
+        while True:
+            data = s.recv(4096).decode()
+            if data == '':
+                break
+            conn.send(data).encode()
+            print(data)
+        return data
+>>>>>>> ba346f63e04912b11f5fa68f55f7384d8818d217
     except Exception as e:
         print(e)
         s.close()
 
 
+<<<<<<< HEAD
 def parse(request, conn):
     print(request)
     try:
@@ -86,6 +120,19 @@ def parse(request, conn):
             http(conn, domain, port)
 
     except socket.error as e:
+=======
+def parse(conn, request):
+    try:
+        port = request.split(':')[1].split('HTTP/1.1')[0].strip()
+        if port == '443':
+            domain = request.split('CONNECT')[1].split(':')[0].strip()
+            https(conn, domain, port, request)
+        elif port == '80':
+            domain = request.split('GET')[1].split(':')[0].strip()
+            http(conn, domain, port, request)
+
+    except Exception as e:
+>>>>>>> ba346f63e04912b11f5fa68f55f7384d8818d217
         print(e)
 
 
@@ -103,6 +150,7 @@ def connect_to_client():
     sock.listen(5)
 
     while True:
+<<<<<<< HEAD
         try:
             conn, address = sock.accept()
             print('[*] Connected To Client.')
@@ -111,6 +159,16 @@ def connect_to_client():
             parse(request, conn)
         except socket.error as e:
             pass
+=======
+        Client, address = sock.accept()
+        print('[*] Connected To Client.')
+        while True:
+            try:
+                data = Client.recv(4096).decode()
+                parse(sock, data)
+            except socket.error as e:
+                pass
+>>>>>>> ba346f63e04912b11f5fa68f55f7384d8818d217
 
 
 if __name__ == "__main__":
