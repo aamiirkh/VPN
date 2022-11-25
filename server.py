@@ -1,7 +1,11 @@
 import socket
 import os
 import requests
+import ssl
 from Crypto.Cipher import AES
+import threading
+
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 
 ThreadCount = 0
 
@@ -23,20 +27,72 @@ def do_decrypt(ciphertext):
     return plaintext.decode('utf-8')
 
 
-def get_html(data):
+def forward_data(server_sock, client_sock):
     try:
-        headers = requests.get(data)
-        print(headers.content)
-        return headers.content
+        while True:
+            data = client_sock.recv(999999)
+            if data:
+                print(data)
+                server_sock.send(data)
+            else:
+                break
+    except:
+        pass
+
+
+def https(client_sock, domain, port):
+    try:
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock = context.wrap_socket(server_sock, do_handshake_on_connect=False, server_side=False)
+        # Connect to the server
+        server_sock.connect(("google.com", 443))
+        #server_sock.do_handshake()
+        client_sock.send(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+
+        threading.Thread(target=forward_data, args=(server_sock, client_sock,)).start()
+        threading.Thread(target=forward_data, args=(client_sock, server_sock,)).start()
+
+    except socket.error as e:
+        print(e)
+
+    return
+
+
+def http(conn, domain, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((domain, 80))
+    s.send(b"GET / HTTP/1.1\r\nHost:" + domain.encode() + b"\r\n\r\n")
+    try:
+        while True:
+            data = s.recv(4096).decode()
+            if len(data) < 1:
+                break
+            conn.send(data.encode())
+            print(data)
     except Exception as e:
+        print(e)
+        s.close()
+
+
+def parse(request, conn):
+    print(request)
+    try:
+        port = request.split(' ')[0].strip()
+        if port == 'CONNECT':
+            domain = request.split('CONNECT')[1].split(':')[0].strip()
+            https(conn, domain, port)
+        elif port == 'GET':
+            domain = request.split('GET')[1].split(':')[0].strip()
+            http(conn, domain, port)
+
+    except socket.error as e:
         print(e)
 
 
 def connect_to_client():
-    global ThreadCount
     host = '127.0.0.1'
     port = 6666
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)        # client socket
 
     try:
         sock.bind((host, port))
@@ -48,16 +104,13 @@ def connect_to_client():
 
     while True:
         try:
-            Client, address = sock.accept()
+            conn, address = sock.accept()
             print('[*] Connected To Client.')
-            while True:
-                data = Client.recv(2048).decode()
-                if data != '':
-                    output = get_html(data)
-                    Client.sendall(output)
+            request = conn.recv(4096).decode()
+            threading.Thread(target=parse, args=(request, conn,)).start()
+            parse(request, conn)
         except socket.error as e:
-            print(e)
-            sock.close()
+            pass
 
 
 if __name__ == "__main__":
