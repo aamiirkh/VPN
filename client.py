@@ -24,11 +24,11 @@ def do_decrypt(ciphertext):
 def forward_data(server_sock, client_sock):
     try:
         while True:
-            data = client_sock.recv(999999)
+            data = server_sock.recv(9999999).decode()
             print(data)
             if len(data) < 1:
                 break
-            server_sock.sendall(data)
+            client_sock.send(data.encode())
 
     except socket.error as e:
         print(e)
@@ -66,10 +66,7 @@ def connection():
             if request:
                 request = request.split('\n')[0]
                 server_sock.sendall(request.encode())
-                threading.Thread(target=forward_data, args=(conn, server_sock,)).start()
-                threading.Thread(target=forward_data, args=(server_sock, conn,)).start()
-        except socket.error as e:
-            print(e)
+        except:
             sock.close()
             sys.exit()
 

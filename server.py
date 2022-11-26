@@ -30,10 +30,10 @@ def do_decrypt(ciphertext):
 def forward_data(server_sock, client_sock):
     try:
         while True:
-            data = client_sock.recv(999999)
+            data = client_sock.recv(9999999).decode()
             if data:
                 print(data)
-                server_sock.send(data)
+                server_sock.send(data.encode())
             else:
                 break
     except:
@@ -42,15 +42,18 @@ def forward_data(server_sock, client_sock):
 
 def https(client_sock, domain, port):
     try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
         server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_sock = context.wrap_socket(server_sock, do_handshake_on_connect=False, server_side=False)
+        server_sock = context.wrap_socket(server_sock, server_hostname="github.com", do_handshake_on_connect=False)
         # Connect to the server
-        server_sock.connect(("google.com", 443))
-        #server_sock.do_handshake()
+        server_sock.connect(("github.com", 443))
         client_sock.send(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+        server_sock.do_handshake()
+        server_sock.send(f"GET / HTTP/1.1\r\nHost: www.github.com\r\n\r\n ".encode())
 
-        threading.Thread(target=forward_data, args=(server_sock, client_sock,)).start()
         threading.Thread(target=forward_data, args=(client_sock, server_sock,)).start()
+        threading.Thread(target=forward_data, args=(server_sock, client_sock,)).start()
+
 
     except socket.error as e:
         print(e)
