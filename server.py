@@ -1,13 +1,13 @@
 import socket
-import os
-import requests
 import ssl
 from Crypto.Cipher import AES
 import threading
 
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-
-ThreadCount = 0
+HOST = '127.0.0.1'
+PORT = 9999
+BUF_SIZE = 4096
+KEY = 'secretkey'
+IV = 'secretIV'
 
 BS = 16
 pad = lambda s: bytes(s + (BS - len(s) % BS) * chr(BS - len(s) % BS), 'utf-8')
@@ -15,90 +15,103 @@ unpad = lambda s : s[0:-ord(s[-1:])]
 
 
 def do_encrypt(plaintext):
-    obj = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CBC, 'This is an IV456'.encode("utf-8"))
+    obj = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
     plaintext = pad(plaintext)
     ciphertext = obj.encrypt(plaintext)
     return ciphertext
 
 
 def do_decrypt(ciphertext):
-    obj2 = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CBC, 'This is an IV456'.encode("utf-8"))
+    obj2 = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
     plaintext = unpad(obj2.decrypt(ciphertext))
     return plaintext.decode('utf-8')
 
 
-def forward_data(server_sock, client_sock):
-    try:
-        while True:
-            data = client_sock.recv(9999999).decode()
-            if data:
-                print(data)
-                server_sock.send(data.encode())
-            else:
-                break
-    except:
-        pass
+def https(request, webserver, client_sock):
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock = context.wrap_socket(server_sock, server_hostname=webserver, do_handshake_on_connect=False)
+    server_sock.connect((webserver, 443))
+    server_sock.send(request)
+
+    chunk = ''
+    data = ''
+
+    server_sock.settimeout(1)
+
+    while True:
+        try:
+            chunk = server_sock.recv(BUF_SIZE).decode(encoding='utf-8', errors='ignore')
+            data += chunk
+        except socket.error as e:
+            server_sock.close()
+            break
+
+    client_sock.send(data.encode())
 
 
-def https(client_sock, domain, port):
-    try:
-        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
-        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_sock = context.wrap_socket(server_sock, server_hostname="github.com", do_handshake_on_connect=False)
-        # Connect to the server
-        server_sock.connect(("github.com", 443))
-        client_sock.send(b'HTTP/1.1 200 Connection Established\r\n\r\n')
-        server_sock.do_handshake()
-        server_sock.send(f"GET / HTTP/1.1\r\nHost: www.github.com\r\n\r\n ".encode())
+def http(request, webserver, client_sock):
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock.connect((webserver, 80))
+    server_sock.send(request)
 
-        threading.Thread(target=forward_data, args=(client_sock, server_sock,)).start()
-        threading.Thread(target=forward_data, args=(server_sock, client_sock,)).start()
+    chunk = ''
+    data = ''
 
+    server_sock.settimeout(1)
 
-    except socket.error as e:
-        print(e)
+    while True:
+        try:
+            chunk = server_sock.recv(BUF_SIZE).decode(encoding='utf-8', errors='ignore')
+            data += chunk
+        except socket.error as e:
+            server_sock.close()
+            break
 
-    return
-
-
-def http(conn, domain, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((domain, 80))
-    s.send(b"GET / HTTP/1.1\r\nHost:" + domain.encode() + b"\r\n\r\n")
-    try:
-        while True:
-            data = s.recv(4096).decode()
-            if len(data) < 1:
-                break
-            conn.send(data.encode())
-            print(data)
-    except Exception as e:
-        print(e)
-        s.close()
+    client_sock.send(data.encode())
 
 
 def parse(request, conn):
-    print(request)
     try:
-        port = request.split(' ')[0].strip()
-        if port == 'CONNECT':
-            domain = request.split('CONNECT')[1].split(':')[0].strip()
-            https(conn, domain, port)
-        elif port == 'GET':
-            domain = request.split('GET')[1].split(':')[0].strip()
-            http(conn, domain, port)
+        header = request.split(b'\n')[0]
 
-    except socket.error as e:
-        print(e)
+        url = header.split(b' ')[1]
+
+        hostIndex = url.find(b"://")
+        if hostIndex == -1:
+            temp = url
+        else:
+            temp = url[(hostIndex + 3):]
+        portIndex = temp.find(b":")
+        serverIndex = temp.find(b"/")
+
+        if serverIndex == -1:
+            serverIndex = len(temp)
+        webserver = ""
+        port = -1
+        if portIndex == -1 or serverIndex < portIndex:
+            port = 80
+            webserver = temp[:serverIndex]
+        else:
+            port = int((temp[portIndex + 1:])[:serverIndex - portIndex - 1])
+            webserver = temp[:portIndex]
+
+        method = request.split(b" ")[0]
+        print(webserver)
+        print(request)
+        if method == b"CONNECT":
+            https(request, webserver, conn)
+        if method == b"GET":
+            http(request, webserver, conn)
+
+    except Exception as e:
+        pass
 
 
 def connect_to_client():
-    host = '127.0.0.1'
-    port = 6666
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)        # client socket
-
     try:
-        sock.bind((host, port))
+        sock.bind((HOST, PORT))
     except socket.error as e:
         print(e)
 
@@ -109,9 +122,9 @@ def connect_to_client():
         try:
             conn, address = sock.accept()
             print('[*] Connected To Client.')
-            request = conn.recv(4096).decode()
-            threading.Thread(target=parse, args=(request, conn,)).start()
-            parse(request, conn)
+            request = conn.recv(BUF_SIZE).decode()
+            if request:
+                threading.Thread(target=parse, args=(request, conn,)).start()    # threads for multiple requests
         except socket.error as e:
             pass
 
