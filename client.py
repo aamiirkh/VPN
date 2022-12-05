@@ -4,11 +4,10 @@ import threading
 from Crypto.Cipher import AES
 
 HOST = '127.0.0.1'
-CLIENT_PORT = 5555
+CLIENT_PORT = 6666
 SERVER_PORT = 9999
 BUF_SIZE = 4096
-KEY = 'secretkey'
-IV = 'secretIV'
+
 
 BS = 16
 pad = lambda s: bytes(s + (BS - len(s) % BS) * chr(BS - len(s) % BS), 'utf-8')
@@ -16,41 +15,34 @@ unpad = lambda s : s[0:-ord(s[-1:])]
 
 
 def do_encrypt(plaintext):
-    obj = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
+    obj = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CFB, 'This is an IV456'.encode("utf-8"))
     plaintext = pad(plaintext)
     ciphertext = obj.encrypt(plaintext)
     return ciphertext
 
 
 def do_decrypt(ciphertext):
-    obj2 = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
+    obj2 = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CFB, 'This is an IV456'.encode("utf-8"))
     plaintext = unpad(obj2.decrypt(ciphertext))
-    return plaintext.decode('utf-8')
-
-
-def receive_from_browser(server_sock, client_sock):
-    data = ''
-
-    while True:
-        try:
-            data = client_sock.recv(BUF_SIZE).decode()
-            if data:
-                server_sock.send(data.encode())
-
-        except socket.error as e:
-            print(e)
+    return plaintext
 
 
 def receive_from_server(client_sock, server_sock):
     data = ''
+    chunk = ''
     while True:
         try:
-            data = server_sock.recv(BUF_SIZE).decode()
-            if data:
-                print(data)
-                client_sock.send(data.encode())
-        except socket.error as e:
+            while True:
+                chunk = server_sock.recv(BUF_SIZE)
+                if chunk:
+                    print(do_decrypt(chunk))
+                    client_sock.send(do_decrypt(chunk))
+                else:
+                    break
+        except (socket.error, KeyboardInterrupt) as e:
             print(e)
+            sys.exit()
+
 
 
 def connection():
@@ -76,8 +68,18 @@ def connection():
     try:
         conn, addr = sock.accept()
 
-        threading.Thread(target=receive_from_browser, args=(server_sock, conn,)).start()
         threading.Thread(target=receive_from_server, args=(conn, server_sock,)).start()
+
+        while True:
+            try:
+                data = conn.recv(BUF_SIZE).decode(encoding='utf-8', errors='ignore')
+                if data:
+                    print(data)
+                    server_sock.send(do_encrypt(data))
+
+            except (socket.error, KeyboardInterrupt) as e:
+                print(e)
+                sys.exit()
 
     except socket.error as e:
         sock.close()

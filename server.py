@@ -2,12 +2,12 @@ import socket
 import ssl
 from Crypto.Cipher import AES
 import threading
+import re
 
 HOST = '127.0.0.1'
 PORT = 9999
 BUF_SIZE = 4096
-KEY = 'secretkey'
-IV = 'secretIV'
+blocklist = ["www.google.com", "www.youtube.com"]
 
 BS = 16
 pad = lambda s: bytes(s + (BS - len(s) % BS) * chr(BS - len(s) % BS), 'utf-8')
@@ -15,14 +15,14 @@ unpad = lambda s : s[0:-ord(s[-1:])]
 
 
 def do_encrypt(plaintext):
-    obj = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
+    obj = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CFB, 'This is an IV456'.encode("utf-8"))
     plaintext = pad(plaintext)
     ciphertext = obj.encrypt(plaintext)
     return ciphertext
 
 
 def do_decrypt(ciphertext):
-    obj2 = AES.new(KEY.encode("utf-8"), AES.MODE_CBC, IV.encode("utf-8"))
+    obj2 = AES.new('This is a key123'.encode("utf-8"), AES.MODE_CFB, 'This is an IV456'.encode("utf-8"))
     plaintext = unpad(obj2.decrypt(ciphertext))
     return plaintext.decode('utf-8')
 
@@ -32,7 +32,7 @@ def https(request, webserver, client_sock):
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock = context.wrap_socket(server_sock, server_hostname=webserver, do_handshake_on_connect=False)
     server_sock.connect((webserver, 443))
-    server_sock.send(request)
+    server_sock.send(f"GET / HTTP/1.1\r\nHost: {webserver}\r\n\r\n ".encode())
 
     chunk = ''
     data = ''
@@ -42,18 +42,21 @@ def https(request, webserver, client_sock):
     while True:
         try:
             chunk = server_sock.recv(BUF_SIZE).decode(encoding='utf-8', errors='ignore')
-            data += chunk
-        except socket.error as e:
+            if chunk:
+                data += chunk
+            else:
+                break
+        except (socket.error, KeyboardInterrupt) as e:
             server_sock.close()
             break
-
-    client_sock.send(data.encode())
+    print(data)
+    client_sock.send(do_encrypt(data))
 
 
 def http(request, webserver, client_sock):
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.connect((webserver, 80))
-    server_sock.send(request)
+    server_sock.send(f"GET / HTTP/1.1\r\nHost: {webserver}\r\n\r\n ".encode())
 
     chunk = ''
     data = ''
@@ -63,12 +66,16 @@ def http(request, webserver, client_sock):
     while True:
         try:
             chunk = server_sock.recv(BUF_SIZE).decode(encoding='utf-8', errors='ignore')
-            data += chunk
-        except socket.error as e:
+            if chunk:
+                data += chunk
+            else:
+                break
+        except (socket.error, KeyboardInterrupt) as e:
             server_sock.close()
             break
 
-    client_sock.send(data.encode())
+    print(data)
+    client_sock.send(do_encrypt(data))
 
 
 def parse(request, conn):
@@ -96,15 +103,25 @@ def parse(request, conn):
             port = int((temp[portIndex + 1:])[:serverIndex - portIndex - 1])
             webserver = temp[:portIndex]
 
+        webserver = webserver.decode()
         method = request.split(b" ")[0]
-        print(webserver)
-        print(request)
+
+        for i in blocklist:
+            if webserver == i:
+                conn.send(do_encrypt("Website is blocked."))
+                print("Website is blocked")
+                return
+
+        x = re.search('www', webserver)
+        if x == 'www':
+            webserver = webserver.split('www')[1]
+
         if method == b"CONNECT":
             https(request, webserver, conn)
         if method == b"GET":
             http(request, webserver, conn)
 
-    except Exception as e:
+    except (socket.error, KeyboardInterrupt) as e:
         pass
 
 
@@ -117,15 +134,16 @@ def connect_to_client():
 
     print('[*] Socket is Listening')
     sock.listen(5)
-
+    conn, address = sock.accept()
+    print('[*] Connected To Client.')
     while True:
         try:
-            conn, address = sock.accept()
-            print('[*] Connected To Client.')
-            request = conn.recv(BUF_SIZE).decode()
+            request = conn.recv(BUF_SIZE)
             if request:
-                threading.Thread(target=parse, args=(request, conn,)).start()    # threads for multiple requests
-        except socket.error as e:
+                request = do_decrypt(request)
+                print(request)
+                threading.Thread(target=parse, args=(request.encode(), conn,)).start()  # threads for multiple requests
+        except (socket.error, KeyboardInterrupt) as e:
             pass
 
 
